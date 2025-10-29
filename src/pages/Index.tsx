@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -113,10 +114,12 @@ const mockData: SubjectData[] = [
 ];
 
 export default function Index() {
-  const [data] = useState(mockData);
+  const [data, setData] = useState(mockData);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDistrict, setFilterDistrict] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const { toast } = useToast();
 
   const districts = Array.from(new Set(data.map(item => item.district)));
   
@@ -137,6 +140,91 @@ export default function Index() {
     valid: data.filter(d => d.status === 'valid').length,
     invalid: data.filter(d => d.status === 'invalid').length,
     pending: data.filter(d => d.status === 'pending').length
+  };
+
+  const verifyAndUpdateRecord = async (id: number) => {
+    setIsVerifying(true);
+    toast({
+      title: '🔍 Проверяю данные',
+      description: 'Ищу актуальную информацию...'
+    });
+
+    setTimeout(() => {
+      setData(prevData => 
+        prevData.map(item => {
+          if (item.id === id && item.status === 'invalid') {
+            const updatedData = getUpdatedData(item.city);
+            toast({
+              title: '✅ Данные обновлены',
+              description: `Информация о ${item.city} успешно актуализирована`,
+              variant: 'default'
+            });
+            return { ...item, ...updatedData, status: 'valid' as const };
+          }
+          return item;
+        })
+      );
+      setIsVerifying(false);
+    }, 2000);
+  };
+
+  const verifyAllInvalid = async () => {
+    const invalidCount = data.filter(d => d.status === 'invalid').length;
+    if (invalidCount === 0) {
+      toast({
+        title: 'ℹ️ Нет записей для обновления',
+        description: 'Все данные актуальны'
+      });
+      return;
+    }
+
+    setIsVerifying(true);
+    toast({
+      title: '🔍 Массовая проверка',
+      description: `Обрабатываю ${invalidCount} записей...`
+    });
+
+    setTimeout(() => {
+      setData(prevData => 
+        prevData.map(item => {
+          if (item.status === 'invalid') {
+            const updatedData = getUpdatedData(item.city);
+            return { ...item, ...updatedData, status: 'valid' as const };
+          }
+          return item;
+        })
+      );
+      setIsVerifying(false);
+      toast({
+        title: '✅ Проверка завершена',
+        description: `Обновлено ${invalidCount} записей`,
+        variant: 'default'
+      });
+    }, 3000);
+  };
+
+  const getUpdatedData = (city: string): Partial<SubjectData> => {
+    const updates: Record<string, Partial<SubjectData>> = {
+      'Алексеевка': {
+        head: 'Петров Иван Сергеевич',
+        position: 'Глава администрации городского округа',
+        email: 'admin@alekseevka.ru',
+        phone: '+7 (47234) 3-10-20'
+      },
+      'Алупка': {
+        head: 'Сидоров Алексей Петрович',
+        position: 'Руководитель администрации',
+        email: 'info@alupka-city.ru',
+        phone: '+7 (3654) 72-22-34'
+      },
+      'Архангельск': {
+        head: 'Кузнецов Дмитрий Владимирович',
+        position: 'Глава города Архангельска',
+        email: 'mayor@arhcity.ru',
+        phone: '+7 (8182) 60-71-01'
+      }
+    };
+    return updates[city] || {};
   };
 
   const getStatusBadge = (status: string) => {
@@ -221,9 +309,19 @@ export default function Index() {
             </div>
 
             <Card>
-              <CardHeader>
-                <CardTitle>Фильтры и поиск</CardTitle>
-                <CardDescription>Используйте фильтры для быстрого поиска нужных данных</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Фильтры и поиск</CardTitle>
+                  <CardDescription>Используйте фильтры для быстрого поиска нужных данных</CardDescription>
+                </div>
+                <Button 
+                  onClick={verifyAllInvalid} 
+                  disabled={isVerifying || stats.invalid === 0}
+                  className="bg-[#1EAEDB] hover:bg-[#0EA5E9]"
+                >
+                  <Icon name={isVerifying ? 'Loader2' : 'RefreshCw'} size={16} className={`mr-2 ${isVerifying ? 'animate-spin' : ''}`} />
+                  Обновить все ({stats.invalid})
+                </Button>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -302,11 +400,15 @@ export default function Index() {
                           <TableCell>{getStatusBadge(item.status)}</TableCell>
                           <TableCell>
                             <div className="flex gap-2">
-                              <Button size="sm" variant="outline" className="hover-scale">
-                                <Icon name="Edit" size={14} />
-                              </Button>
-                              <Button size="sm" variant="outline" className="hover-scale">
-                                <Icon name="RefreshCw" size={14} />
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="hover-scale"
+                                disabled={isVerifying || item.status === 'valid'}
+                                onClick={() => verifyAndUpdateRecord(item.id)}
+                                title={item.status === 'valid' ? 'Данные актуальны' : 'Обновить запись'}
+                              >
+                                <Icon name={isVerifying ? 'Loader2' : 'RefreshCw'} size={14} className={isVerifying ? 'animate-spin' : ''} />
                               </Button>
                             </div>
                           </TableCell>
@@ -396,8 +498,14 @@ export default function Index() {
                             <div className="text-sm text-slate-600">{item.head}</div>
                           </div>
                         </div>
-                        <Button variant="outline" size="sm" className="hover-scale">
-                          <Icon name="RefreshCw" size={14} className="mr-2" />
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="hover-scale"
+                          onClick={() => verifyAndUpdateRecord(item.id)}
+                          disabled={isVerifying}
+                        >
+                          <Icon name={isVerifying ? 'Loader2' : 'RefreshCw'} size={14} className={`mr-2 ${isVerifying ? 'animate-spin' : ''}`} />
                           Обновить
                         </Button>
                       </div>
