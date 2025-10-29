@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import * as XLSX from 'xlsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -203,6 +204,66 @@ export default function Index() {
     }, 3000);
   };
 
+  const exportToExcel = () => {
+    const exportData = data.map(item => ({
+      'Федеральный округ': item.district,
+      'Регион': item.region,
+      'Город': item.city,
+      'Глава': item.head,
+      'Должность': item.position,
+      'Email': item.email,
+      'Телефон': item.phone,
+      'Статус': item.status === 'valid' ? 'Актуально' : item.status === 'invalid' ? 'Требует обновления' : 'На проверке'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Данные субъектов');
+    
+    const date = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `verified_data_${date}.xlsx`);
+    
+    toast({
+      title: '📥 Экспорт завершён',
+      description: 'Данные успешно сохранены в Excel',
+      variant: 'default'
+    });
+  };
+
+  const exportUpdatedOnly = () => {
+    const updatedData = data.filter(item => item.status === 'valid').map(item => ({
+      'Федеральный округ': item.district,
+      'Регион': item.region,
+      'Город': item.city,
+      'Глава': item.head,
+      'Должность': item.position,
+      'Email': item.email,
+      'Телефон': item.phone,
+      'Дата обновления': new Date().toLocaleDateString('ru-RU')
+    }));
+
+    if (updatedData.length === 0) {
+      toast({
+        title: 'ℹ️ Нет данных для экспорта',
+        description: 'Обновите записи перед экспортом'
+      });
+      return;
+    }
+
+    const ws = XLSX.utils.json_to_sheet(updatedData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Обновлённые данные');
+    
+    const date = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `updated_data_${date}.xlsx`);
+    
+    toast({
+      title: '✅ Экспорт обновлённых данных',
+      description: `Экспортировано ${updatedData.length} актуальных записей`,
+      variant: 'default'
+    });
+  };
+
   const getUpdatedData = (city: string): Partial<SubjectData> => {
     const updates: Record<string, Partial<SubjectData>> = {
       'Алексеевка': {
@@ -314,14 +375,32 @@ export default function Index() {
                   <CardTitle>Фильтры и поиск</CardTitle>
                   <CardDescription>Используйте фильтры для быстрого поиска нужных данных</CardDescription>
                 </div>
-                <Button 
-                  onClick={verifyAllInvalid} 
-                  disabled={isVerifying || stats.invalid === 0}
-                  className="bg-[#1EAEDB] hover:bg-[#0EA5E9]"
-                >
-                  <Icon name={isVerifying ? 'Loader2' : 'RefreshCw'} size={16} className={`mr-2 ${isVerifying ? 'animate-spin' : ''}`} />
-                  Обновить все ({stats.invalid})
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={verifyAllInvalid} 
+                    disabled={isVerifying || stats.invalid === 0}
+                    className="bg-[#1EAEDB] hover:bg-[#0EA5E9]"
+                  >
+                    <Icon name={isVerifying ? 'Loader2' : 'RefreshCw'} size={16} className={`mr-2 ${isVerifying ? 'animate-spin' : ''}`} />
+                    Обновить все ({stats.invalid})
+                  </Button>
+                  <Button 
+                    onClick={exportToExcel}
+                    variant="outline"
+                    className="hover-scale"
+                  >
+                    <Icon name="Download" size={16} className="mr-2" />
+                    Экспорт всех
+                  </Button>
+                  <Button 
+                    onClick={exportUpdatedOnly}
+                    variant="outline"
+                    className="hover-scale bg-green-50 hover:bg-green-100 border-green-200"
+                  >
+                    <Icon name="FileSpreadsheet" size={16} className="mr-2" />
+                    Экспорт обновлённых
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -363,8 +442,19 @@ export default function Index() {
             </Card>
 
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Записи субъектов ({filteredData.length})</CardTitle>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={exportToExcel}
+                    size="sm"
+                    variant="outline"
+                    className="hover-scale"
+                  >
+                    <Icon name="Download" size={14} className="mr-2" />
+                    Скачать таблицу
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="rounded-md border overflow-x-auto">
